@@ -45,3 +45,288 @@ function dialectic(){const c=M.case;if(M.index<3){frame(`<h2>${c.name}</h2><p>${
 function complete(){M.locked=true;const reward=practice?0:S.pending.reward,base=Math.max(40,100-10*M.totalErrors),points=Math.min(105,base+M.bonus+reward);M.points=points;app.innerHTML=`<section class="complete"><div class="award">✦</div><div class="eyebrow" style="justify-content:center">${M.id===6?'Tribunal superado':'Desafío superado'}</div><h1>${GAMES[M.id].name}</h1><div class="stats"><div class="stat"><b>${points}</b><small>puntos del desafío</small></div><div class="stat"><b>${M.totalErrors}</b><small>errores en todos los intentos</small></div><div class="stat"><b>+1 ✦</b><small>${practice?'estrella de práctica':'estrella ganada'}</small></div></div><div class="panel"><h2>La idea que te llevas</h2><p>${GAMES[M.id].summary}</p>${M.id===4?`<p>${M.case.why}</p>`:''}</div><p class="small">Puntuación: 100 − 10 por error (mínimo 40), más premios; máximo 105. La predicción fallida no penaliza.</p><button id="finish" class="gold-btn">${practice?'Volver a prácticas':'Recoger estrella y continuar →'}</button></section>`;on('finish',()=>{if(practice)return practiceMenu();if(!M)return;const p=player();p.results.push(points);p.stars++;if(!S.visited.includes(M.id))S.visited.push(M.id);S.turn++;S.pending=null;M=null;if(S.turn>=S.normalTurns+S.players.length){S.ended=true;save();ending()}else{save();board()}});tone()}
 function ending(){const ranks=[...S.players].sort((a,b)=>average(b)-average(a));app.innerHTML=`<section class="complete celebrate"><div class="award">♜ ✦</div><div class="eyebrow" style="justify-content:center">La fiesta de las ideas</div><h1>¡El tribunal ha sido superado!</h1><p>Exploraste la experiencia, sus condiciones y el desarrollo de los conceptos. Las buenas preguntas también son una victoria.</p><div class="ranking">${ranks.map((p,i)=>`<div class="rank-row"><b>${i>0&&average(p)===average(ranks[i-1])?'=':i+1}</b>${mascot(p.avatar)}<span class="rank-name"><strong>${esc(p.name)}</strong><br><small>${p.stars} estrellas · ${p.results.reduce((a,b)=>a+b,0)} puntos acumulados</small></span><b>${average(p)}<small style="display:block;font-size:11px">puntos medios</small></b></div>`).join('')}</div><p class="small">Gana la mayor media por desafío. Igual media = empate compartido. Todos los equipos completan el mismo número de turnos.</p><div class="panel"><h2>Para conversar antes de salir</h2><p>¿Por qué una predicción exitosa no equivale a una demostración? ¿Qué aporta Kant que no aporta la costumbre? ¿Cómo cambia Hegel la pregunta por los límites del pensamiento?</p></div><p><button id="again" class="gold-btn">Nueva aventura ↻</button> <button id="practice-final">Seguir practicando</button></p></section>`;on('again',home);on('practice-final',practiceMenu)}
 home();
+
+
+/* ============================================================
+   METAFÍSICA PARTY — SOPORTE PARA MANDOS USB / 2.4 GHz
+   Añadido sin cambiar las reglas, preguntas ni partidas guardadas.
+   Usa la Gamepad API nativa del navegador (Chrome/Edge/Firefox).
+   ============================================================ */
+(() => {
+  'use strict';
+  const STORE = 'metafisica-party-mando-v1';
+  const defaults = { aceptar: 0, alternativo: 2, volver: 1, principal: 9, anterior: 4, siguiente: 5 };
+  const names = {
+    aceptar: 'Aceptar / seleccionar', alternativo: 'Otro botón para aceptar',
+    volver: 'Volver / cerrar diálogo', principal: 'Acción principal',
+    anterior: 'Opción anterior', siguiente: 'Opción siguiente'
+  };
+  let controls = {...defaults};
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE) || '{}');
+    for (const k of Object.keys(defaults)) {
+      if (Number.isInteger(saved[k]) && saved[k] >= 0 && saved[k] < 64) controls[k] = saved[k];
+    }
+  } catch (_) {}
+
+  const style = document.createElement('style');
+  style.textContent = `
+    .mp-gamepad-focus {outline:4px solid #ffd46c !important;outline-offset:3px !important;
+      box-shadow:0 0 0 7px rgba(24,39,73,.58) !important;position:relative;z-index:2}
+    #mp-gamepad-indicator {position:fixed;bottom:14px;right:14px;z-index:1000;
+      background:#172448;color:#fff4d7;border:2px solid #9ebff5;border-radius:14px;
+      box-shadow:0 5px 20px #0711226b;font:600 12px/1.35 system-ui,sans-serif;
+      display:flex;align-items:center;gap:8px;padding:7px 8px 7px 12px;max-width:min(370px,96vw)}
+    #mp-gamepad-indicator button {min-height:32px !important;min-width:34px !important;
+      padding:4px 7px !important;border-radius:9px;font-size:14px !important;
+      background:#36547d !important;color:white !important;border:1px solid #9ebff5 !important}
+    #mp-gamepad-indicator.connected {border-color:#95dfbf}
+    #mp-gamepad-dialog {max-width:min(560px,95vw);max-height:90vh;overflow:auto;color:#172448;
+      background:#fff8e9;border:3px solid #9ebff5;border-radius:17px;padding:20px 22px;
+      box-shadow:0 15px 80px #0610239c;font:15px/1.4 system-ui,sans-serif}
+    #mp-gamepad-dialog::backdrop {background:rgba(7,16,35,.72)}
+    #mp-gamepad-dialog h2 {font-size:23px;margin:0 0 10px;color:#172448}
+    #mp-gamepad-dialog p {margin:8px 0 12px;color:#263b57}
+    #mp-gamepad-dialog .mp-mapping {display:flex;align-items:center;gap:9px;
+      justify-content:space-between;border-bottom:1px solid #c8d3d6;padding:7px 0}
+    #mp-gamepad-dialog .mp-mapping span {flex:1}
+    #mp-gamepad-dialog button {font:600 13px/1.3 system-ui,sans-serif;min-height:36px !important;
+      color:#fff;background:#234773;border:0;border-radius:8px;padding:7px 12px;cursor:pointer}
+    #mp-gamepad-dialog #mp-close {background:#217052;margin-top:13px}
+    #mp-gamepad-dialog #mp-reset {background:#6d516a;margin-top:13px}
+    #mp-gamepad-dialog #mp-capture {background:#fff0b1;color:#493b0b;
+      border-radius:8px;padding:9px;min-height:24px}
+    @media (max-width:520px) {#mp-gamepad-indicator {bottom:8px;right:8px;max-width:250px;
+      font-size:11px} #mp-gamepad-dialog {padding:15px}}
+  `;
+  document.head.appendChild(style);
+
+  const indicator = document.createElement('div');
+  indicator.id = 'mp-gamepad-indicator';
+  indicator.innerHTML = '<span id="mp-gamepad-state">🎮 Pulsa un botón del mando para conectarlo</span>' +
+    '<button type="button" id="mp-gamepad-setup" title="Configurar el mando" aria-label="Configurar el mando">⚙</button>';
+  document.body.appendChild(indicator);
+  const setup = document.createElement('dialog');
+  setup.id = 'mp-gamepad-dialog';
+  setup.innerHTML = `
+    <h2>🎮 Control para Metafísica Party</h2>
+    <p>Conecta el receptor USB y pulsa cualquier botón del mando. La palanca izquierda o la cruceta
+       recorren las opciones; <b>aceptar</b> elige una respuesta, lanza el dado o continúa.</p>
+    <p>Si los botones de tu TGZ no coinciden, puedes asignarlos aquí: pulsa <b>Asignar</b> y luego
+       el botón físico correspondiente. No se borra ninguna partida.</p>
+    <div id="mp-gamepad-details" aria-live="polite">Esperando un mando…</div>
+    <div id="mp-gamepad-mappings"></div>
+    <p id="mp-capture" aria-live="polite">Pulsa «Asignar» para personalizar un botón.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:9px">
+      <button id="mp-reset" type="button">Restablecer botones</button>
+      <button id="mp-close" type="button">Cerrar y jugar</button>
+    </div>`;
+  document.body.appendChild(setup);
+
+  let enabled = false, selected = null, currentPadId = '', previousButtons = [],
+      lastDirection = '', nextDirectionAt = 0, lastInfoAt = 0, waitingFor = null, povNeutralSeen = false;
+  const state = indicator.querySelector('#mp-gamepad-state');
+  const info = setup.querySelector('#mp-gamepad-details');
+  const capture = setup.querySelector('#mp-capture');
+  const mappings = setup.querySelector('#mp-gamepad-mappings');
+
+  const getPad = () => {
+    if (typeof navigator.getGamepads !== 'function') return null;
+    try { return Array.from(navigator.getGamepads() || []).find(p => p && p.connected) || null; }
+    catch (_) { return null; }
+  };
+  const pressed = b => !!b && (b.pressed || b.value > 0.65);
+  const inDialog = () => setup.open ? setup : (document.getElementById('dialog')?.open ? document.getElementById('dialog') : null);
+  const visible = el => !!el && el.isConnected && !el.disabled &&
+    el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
+  function options() {
+    const dlg = inDialog();
+    const root = dlg || document;
+    const selector = dlg ? 'button,select,input,a[href],[role="button"]' :
+      '#app button,#app select,#app input,#app a[href],#app [role="button"],header button';
+    return Array.from(root.querySelectorAll(selector)).filter(visible);
+  }
+  function prefer(list) {
+    const selectors = [
+      '#next-row button', '#roll', '#finish', '#start', '#again', '#prediction-next',
+      '#close-dialog', '#mp-close', '.target', '.choices button', '#card', '#mode',
+      '#resume', '#practice'
+    ];
+    for (const s of selectors) { const found = list.find(el => el.matches(s)); if (found) return found; }
+    return list[0] || null;
+  }
+  function choose(el) {
+    if (!el || !visible(el)) return;
+    if (selected && selected !== el) selected.classList.remove('mp-gamepad-focus');
+    selected = el;
+    el.classList.add('mp-gamepad-focus');
+    try { el.focus({preventScroll: true}); } catch (_) { el.focus(); }
+    el.scrollIntoView({block:'nearest', inline:'nearest', behavior:'instant'});
+  }
+  function ensureSelection() {
+    const list = options();
+    if (!list.length) { if (selected) selected.classList.remove('mp-gamepad-focus'); selected = null; return null; }
+    if (!selected || !list.includes(selected)) choose(prefer(list));
+    return selected;
+  }
+  function nearby(direction) {
+    const list = options();
+    if (!list.length) return;
+    const from = ensureSelection();
+    if (!from) return;
+    if (from.matches('select') && (direction === 'left' || direction === 'right')) {
+      const delta = direction === 'right' ? 1 : -1;
+      from.selectedIndex = (from.selectedIndex + delta + from.options.length) % from.options.length;
+      from.dispatchEvent(new Event('change', {bubbles: true}));
+      choose(from); return;
+    }
+    const a = from.getBoundingClientRect();
+    const ax = (a.left + a.right) / 2, ay = (a.top + a.bottom) / 2;
+    let target = null, best = Infinity;
+    for (const el of list) {
+      if (el === from) continue;
+      const b = el.getBoundingClientRect(), dx = (b.left+b.right)/2-ax,
+            dy = (b.top+b.bottom)/2-ay;
+      const main = direction==='right'?dx:direction==='left'?-dx:direction==='down'?dy:-dy;
+      const ortho = direction==='right'||direction==='left'?Math.abs(dy):Math.abs(dx);
+      if (main <= 5) continue;
+      const score = main + ortho*2.3 + (ortho > main*1.5 ? 150 : 0);
+      if (score < best) { best = score; target = el; }
+    }
+    if (!target) {
+      const idx = list.indexOf(from);
+      target = list[(idx+(direction==='right'||direction==='down'?1:-1)+list.length)%list.length];
+    }
+    choose(target);
+  }
+  function cycle(delta) {
+    const list = options();
+    if (!list.length) return;
+    const pos = list.indexOf(ensureSelection());
+    choose(list[(pos + delta + list.length)%list.length]);
+  }
+  function accept() {
+    const el = ensureSelection();
+    if (!el) return;
+    if (el.matches('select')) { choose(el); return; }
+    el.click();
+  }
+  function primary() {
+    const list = options();
+    const btn = list.find(el => el.matches('#next-row button,#roll,#finish,#start,#prediction-next,#close-dialog,#mp-close,#again'));
+    if (btn) { choose(btn); accept(); } else accept();
+  }
+  function back() {
+    if (setup.open) { closeSetup(); return; }
+    const dialog = document.getElementById('dialog');
+    if (dialog?.open) { dialog.close(); selected=null; return; }
+    const card = document.getElementById('card');
+    if (card?.classList.contains('selected')) { card.classList.remove('selected'); card.setAttribute('aria-pressed','false'); }
+    else cycle(-1);
+  }
+  function buildMappings() {
+    mappings.innerHTML = Object.entries(names).map(([k, label]) =>
+      `<div class="mp-mapping"><span>${label}</span><b>${controls[k]}</b>` +
+      `<button type="button" data-mp-map="${k}">Asignar</button></div>`).join('');
+  }
+  function closeSetup() {waitingFor = null; setup.close(); selected=null;}
+  indicator.querySelector('#mp-gamepad-setup').addEventListener('click', () => {
+    buildMappings(); setup.showModal(); selected=null; ensureSelection();
+  });
+  setup.querySelector('#mp-close').addEventListener('click', closeSetup);
+  setup.querySelector('#mp-reset').addEventListener('click', () => {
+    controls={...defaults}; try {localStorage.removeItem(STORE);} catch (_) {}
+    waitingFor=null; capture.textContent='Botones restablecidos.';buildMappings();
+  });
+  mappings.addEventListener('click', e => {
+    const btn=e.target.closest('[data-mp-map]'); if (!btn) return;
+    waitingFor=btn.dataset.mpMap;
+    capture.textContent=`Pulsa ahora el botón físico para «${names[waitingFor]}»…`;
+  });
+  setup.addEventListener('close', () => { waitingFor=null;selected=null; });
+
+  function directionFor(g) {
+    const bs = g.buttons || [], axis = g.axes || [];
+    // Mapeo estándar: D-pad 12/13/14/15. En mandos genéricos, usamos palanca izquierda.
+    const horizontal = (pressed(bs[14])?-1:0)+(pressed(bs[15])?1:0);
+    const vertical = (pressed(bs[12])?-1:0)+(pressed(bs[13])?1:0);
+    // Algunos mandos DirectInput comunican la cruceta como un eje POV (eje 9).
+    if (axis.length>9 && axis[9]>1.12) povNeutralSeen=true;
+    if (povNeutralSeen && axis.length>9 && axis[9]>=-1.06 && axis[9]<=1.06) {
+      const sector=Math.max(0,Math.min(7,Math.round((axis[9]+1)*3.5)));
+      return ['up','right','right','down','down','left','left','up'][sector];
+    }
+    const x = horizontal || (axis[0] || 0), y = vertical || (axis[1] || 0);
+    if (Math.abs(x) < .48 && Math.abs(y) < .48) return '';
+    return Math.abs(x) >= Math.abs(y) ? (x>0?'right':'left') : (y>0?'down':'up');
+  }
+  function report(g, now) {
+    if (!g) {
+      indicator.classList.remove('connected');
+      const text = typeof navigator.getGamepads==='function' ?
+        '🎮 Conecta el receptor y pulsa un botón del mando' :
+        '🎮 Este navegador no admite mandos';
+      if (state.textContent!==text)state.textContent=text;
+      if (setup.open)info.textContent='No se detecta ningún mando. Revisa el receptor USB y pulsa un botón.';
+      return;
+    }
+    indicator.classList.add('connected');
+    const text = '🎮 Mando listo · palanca para elegir · A para aceptar';
+    if (state.textContent!==text)state.textContent=text;
+    if (setup.open && now-lastInfoAt>180) {
+      const buttons=(g.buttons||[]).map((b,i)=>pressed(b)?i:null).filter(i=>i!==null);
+      info.textContent=`Detectado: ${g.id || 'Mando USB'} · ${g.buttons.length} botones · `+
+        `Pulsados: ${buttons.length?buttons.join(', '):'ninguno'} · `+
+        `Palanca: ${(g.axes[0]||0).toFixed(2)}, ${(g.axes[1]||0).toFixed(2)}`;
+      lastInfoAt=now;
+    }
+  }
+  function frame(now) {
+    const g = getPad();
+    report(g,now);
+    if (!g) {
+      previousButtons=[];lastDirection='';currentPadId='';
+      requestAnimationFrame(frame);return;
+    }
+    if (g.id!==currentPadId) {currentPadId=g.id;previousButtons=[];lastDirection='';}
+    const buttons=Array.from(g.buttons||[],pressed);
+    const edges=[];
+    for (let i=0;i<buttons.length;i++) if (buttons[i]&&!previousButtons[i])edges.push(i);
+    previousButtons=buttons;
+    const dir=directionFor(g);
+    if (edges.length || dir) enabled=true;
+    if (waitingFor && edges.length) {
+      controls[waitingFor]=edges[0];
+      try {localStorage.setItem(STORE,JSON.stringify(controls));} catch (_) {}
+      capture.textContent=`¡Listo! «${names[waitingFor]}» es ahora el botón ${edges[0]}.`;
+      waitingFor=null;buildMappings();
+      requestAnimationFrame(frame);return;
+    }
+    if (enabled && !waitingFor) {
+      if (dir && (dir!==lastDirection || now>=nextDirectionAt)) {
+        nearby(dir);nextDirectionAt=now+(dir!==lastDirection?280:170);
+      }
+      lastDirection=dir;
+      // El botón de confirmar siempre se interpreta después de la navegación.
+      for (const idx of edges) {
+        if (idx===controls.volver) {back();break;}
+        if (idx===controls.aceptar||idx===controls.alternativo) {accept();break;}
+        if (idx===controls.principal) {primary();break;}
+        if (idx===controls.anterior) {cycle(-1);break;}
+        if (idx===controls.siguiente) {cycle(1);break;}
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+  // Tras una respuesta, el botón 'Continuar' aparece sin recargar el resto de la pantalla.
+  // Se le da el foco automáticamente para avanzar con el mismo botón del mando.
+  const gameRoot = document.getElementById('app');
+  if (gameRoot) new MutationObserver(() => {
+    if (!enabled || inDialog()) return;
+    const next = document.querySelector('#next-row button');
+    if (next && visible(next) && selected !== next) choose(next);
+  }).observe(gameRoot,{childList:true,subtree:true});
+  window.addEventListener('gamepaddisconnected',()=>{selected?.classList.remove('mp-gamepad-focus');selected=null;});
+  window.addEventListener('gamepadconnected',()=>{enabled=true;});
+  requestAnimationFrame(frame);
+})();
